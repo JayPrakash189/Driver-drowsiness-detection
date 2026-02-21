@@ -1,8 +1,43 @@
-Features section with all detection capabilities listed clearly
-Tech Stack table so viewers know what's used at a glance
-Project Structure showing exactly which files go in the repo (and noting the model is auto-downloaded)
-Quick Start — step-by-step install + run instructions
-How It Works — explains EAR/JAW math so it looks professional
-Threshold Tuning guide so users can calibrate it for their face
-Streamlit Cloud deploy instructions
-Sound alert explanation with the browser interaction note
+## Real-Time Driver Drowsiness Detection System
+
+AI-based driver monitoring system using MediaPipe face landmarks, EAR,JAW analysis and Streamlit interface to detect fatigue and trigger real-time alerts.
+
+## Overview
+
+Driver drowsiness is a major cause of road accidents.
+This project uses real-time webcam input to monitor eye closure and yawning patterns and alerts the driver using an audio warning.
+
+## Features
+
+* Real-time face landmark detection (MediaPipe Face Mesh)
+* Eye Aspect Ratio (EAR) based eye-closure detection
+* Mouth Aspect Ratio (MAR/JAW) yawning detection
+* Audio alert when drowsiness detected
+* Streamlit web interface
+* Lightweight & real-time performance
+  
+#Pipeline:
+
+Webcam → Face Mesh → EAR/MAR → Drowsiness Logic → Alert + UI
+
+
+### Technical Details
+
+## Eye Aspect Ratio (EAR)
+EAR = (||p2 - p6|| + ||p3 - p5||) / (2 × ||p1 - p4||)
+
+If EAR < threshold → Eye closed → Possible drowsiness
+
+## Mouth Aspect Ratio (MAR)
+
+MAR = vertical mouth distance / horizontal mouth distance
+
+If MAR > threshold → Yawning detected
+
+## 🚀 Future Improvements
+
+* Head pose tracking
+* CNN/LSTM fatigue prediction
+* Mobile deployment
+* Edge device optimization
+
