@@ -1,0 +1,15 @@
+# MediaPipe model file — too large for GitHub (6MB)
+# It auto-downloads on first run
+face_landmarker.task
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
