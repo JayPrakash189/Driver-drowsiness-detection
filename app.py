@@ -1,7 +1,9 @@
-import os, time, threading, urllib.request
-os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
-os.environ["QT_QPA_PLATFORM"] = "offscreen"
-os.environ["DISPLAY"] = ""
+import os, sys, time, threading, urllib.request
+
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
+os.environ["LIBGL_ALWAYS_SOFTWARE"]    = "1"
+os.environ["QT_QPA_PLATFORM"]          = "offscreen"
+os.environ["DISPLAY"]                  = ""
 
 import cv2
 import numpy as np
@@ -254,7 +256,7 @@ def video_callback(frame):
 
 # ── SIDEBAR ──────────────────────────────────────────────
 with st.sidebar:
-    st.title("⚙️ Settings")
+    st.title("Settings")
     ear_thr    = st.slider("EAR Threshold",      0.10, 0.35, 0.20, 0.01,
                            help="Eyes CLOSED if EAR drops below this. Normal open eyes = 0.28-0.35")
     jaw_thr    = st.slider("JAW Threshold",      0.10, 0.70, 0.35, 0.01,
@@ -273,34 +275,34 @@ with st.sidebar:
 - Set EAR threshold between those two values
 - Distraction triggers after ~1 second of looking away
     """)
-    if st.button("🔄 Reset Counters"):
+    if st.button(" Reset Counters"):
         state.reset()
         st.rerun()
 
 # ── MAIN UI ──────────────────────────────────────────────
 snap = state.snapshot()
 
-st.title("🚗 Driver Drowsiness Monitor")
+st.title("Driver Drowsiness Monitor")
 st.markdown("---")
 
 if snap["alert"] == "DROWSY":
-    st.error("😴 DROWSY! Eyes closed too long — Wake Up!")
+    st.error(" DROWSY! Eyes closed too long — Wake Up!")
 elif snap["alert"] == "YAWN":
-    st.warning("🥱 YAWN detected — You may be tired, consider a break.")
+    st.warning(" YAWN detected — You may be tired, consider a break.")
 elif snap["alert"] == "DISTRACTED":
-    st.info("👀 DISTRACTED! Look at the road!")
+    st.info(" DISTRACTED! Look at the road!")
 else:
-    st.success("✅ Driver is Alert and Focused")
+    st.success(" Driver is Alert and Focused")
 
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("👁 EAR",     f"{snap['ear']:.3f}")
-c2.metric("😮 JAW",     f"{snap['jaw']:.3f}")
-c3.metric("👁 Blinks",  snap["blinks"])
-c4.metric("🥱 Yawns",   snap["yawns"])
-c5.metric("⏱ Session", f"{snap['mins']}m")
+c1.metric(" EAR",     f"{snap['ear']:.3f}")
+c2.metric(" JAW",     f"{snap['jaw']:.3f}")
+c3.metric(" Blinks",  snap["blinks"])
+c4.metric(" Yawns",   snap["yawns"])
+c5.metric(" Session", f"{snap['mins']}m")
 
 if snap["yawns"] >= 3:
-    st.warning("⚠️ HIGH FATIGUE — 3+ yawns! Please take a break.")
+    st.warning(" HIGH FATIGUE — 3+ yawns! Please take a break.")
 
 st.markdown("---")
 
@@ -320,8 +322,8 @@ with col_video:
     )
 
 with col_info:
-    face_status = "✅ Face Detected" if snap["face_found"] else "❌ No Face"
-    eye_status  = f"🔴 CLOSED {snap['secs_closed']:.1f}s" if snap["eye_state"] == "CLOSED" else "🟢 OPEN"
+    face_status = "Face Detected" if snap["face_found"] else " No Face"
+    eye_status  = f"CLOSED {snap['secs_closed']:.1f}s" if snap["eye_state"] == "CLOSED" else " OPEN"
     st.markdown(f"""
 **Face:** {face_status}
 
@@ -336,10 +338,10 @@ with col_info:
     st.markdown("---")
     st.markdown("""
 **Alert Guide:**
-- 😴 Drowsy = eyes closed too long
-- 🥱 Yawn = mouth wide open
-- 👀 Distracted = head turned 1+ sec
-- ⚠️ 3+ yawns = take a break!
+-  Drowsy = eyes closed too long
+-  Yawn = mouth wide open
+-  Distracted = head turned 1+ sec
+-  3+ yawns = take a break!
     """)
 
 # ── BEEP ─────────────────────────────────────────────────
