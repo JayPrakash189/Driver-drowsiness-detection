@@ -313,9 +313,19 @@ with col_video:
     webrtc_streamer(
         key="driver-monitor",
         mode=WebRtcMode.SENDRECV,
-        rtc_configuration=RTCConfiguration(
-            {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-        ),
+       rtc_configuration=RTCConfiguration({"iceServers": [
+    {"urls": ["stun:stun.l.google.com:19302"]},
+    {
+        "urls": ["turn:openrelay.metered.ca:80"],
+        "username": "openrelayproject",
+        "credential": "openrelayproject",
+    },
+    {
+        "urls": ["turn:openrelay.metered.ca:443"],
+        "username": "openrelayproject",
+        "credential": "openrelayproject",
+    },
+]}),
         video_frame_callback=video_callback,
         media_stream_constraints={"video": {"width": 640, "height": 480}, "audio": False},
         async_processing=True,
