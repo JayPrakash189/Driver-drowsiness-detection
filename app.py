@@ -1,11 +1,11 @@
-import os, time, threading, urllib.request
+import os, time, urllib.request
 import numpy as np
 import streamlit as st
 import mediapipe as mp
 import cv2
 from scipy.spatial import distance as dist
-import streamlit.components.v1 as components
 from PIL import Image
+import streamlit.components.v1 as components
 
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
 os.environ["LIBGL_ALWAYS_SOFTWARE"]    = "1"
@@ -37,8 +37,8 @@ def load_model():
 
 model = load_model()
 
-LEFT_EYE  = [33, 160, 158, 133, 153, 144]
-RIGHT_EYE = [362, 385, 387, 263, 373, 380]
+LEFT_EYE    = [33, 160, 158, 133, 153, 144]
+RIGHT_EYE   = [362, 385, 387, 263, 373, 380]
 MOUTH_OUTER = [61, 40, 37, 0, 267, 270, 291, 321, 375, 321, 405, 314, 17, 84, 181, 91, 61]
 MOUTH_INNER = [78, 82, 87, 13, 317, 312, 308, 402, 317, 14, 87]
 
@@ -54,9 +54,9 @@ def check_distraction(lm):
     cy = (lm[152].y + lm[10].y)  / 2
     h  = lm[1].x - cx
     v  = lm[1].y - cy
-    if abs(h) > 0.15: return "Looking Away (H)"
-    if v < -0.14:     return "Looking Up"
-    if v >  0.18:     return "Looking Down"
+    if abs(h) > 0.15: return "H"
+    if v < -0.14:     return "U"
+    if v >  0.18:     return "D"
     return None
 
 def draw_pts(img, lm, idx, W, H, color):
@@ -71,16 +71,12 @@ def analyze_frame(img_bgr, ear_thr, jaw_thr):
                       data=cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
     result = model.detect(mp_img)
 
-    ear = 0.30
-    jaw = 0.0
-    face_found = False
-    distraction = None
-    alert = ""
+    ear = 0.30; jaw = 0.0; face_found = False; distraction = None; alert = ""
     annotated = img_bgr.copy()
 
     if result.face_landmarks:
         face_found = True
-        lm = result.face_landmarks[0]
+        lm  = result.face_landmarks[0]
         ear = (calc_ear(lm, LEFT_EYE, W, H) + calc_ear(lm, RIGHT_EYE, W, H)) / 2
         if result.face_blendshapes:
             bs  = {c.category_name: c.score for c in result.face_blendshapes[0]}
@@ -91,20 +87,15 @@ def analyze_frame(img_bgr, ear_thr, jaw_thr):
         draw_pts(annotated, lm, MOUTH_OUTER, W, H, (0, 180, 255))
         draw_pts(annotated, lm, MOUTH_INNER, W, H, (0, 140, 200))
 
-        # Determine alert
-        if ear < ear_thr:
-            alert = "DROWSY"
-        elif jaw > jaw_thr:
-            alert = "YAWN"
-        elif distraction:
-            alert = "DISTRACTED"
-
-        # Draw HUD
         ec = (50, 50, 255) if ear < ear_thr else (0, 210, 90)
         jc = (50, 50, 255) if jaw > jaw_thr  else (0, 210, 90)
         cv2.rectangle(annotated, (0, 0), (W, 80), (5, 8, 18), -1)
         cv2.putText(annotated, f"EAR: {ear:.3f}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, ec, 2)
         cv2.putText(annotated, f"JAW: {jaw:.3f}", (5, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.6, jc, 2)
+
+        if ear < ear_thr:   alert = "DROWSY"
+        elif jaw > jaw_thr: alert = "YAWN"
+        elif distraction:   alert = "DISTRACTED"
 
         if alert == "DROWSY":
             cv2.rectangle(annotated, (0, H-60), (W, H), (0, 0, 140), -1)
@@ -122,164 +113,149 @@ def analyze_frame(img_bgr, ear_thr, jaw_thr):
     return annotated, ear, jaw, face_found, alert, distraction
 
 # ── SESSION STATE ─────────────────────────────────────────
-if "blinks"     not in st.session_state: st.session_state.blinks     = 0
-if "yawns"      not in st.session_state: st.session_state.yawns      = 0
-if "start_time" not in st.session_state: st.session_state.start_time = time.time()
-if "prev_ear"   not in st.session_state: st.session_state.prev_ear   = 0.30
-if "eye_was_closed" not in st.session_state: st.session_state.eye_was_closed = False
-if "yawn_active"    not in st.session_state: st.session_state.yawn_active    = False
+defaults = {
+    "blinks": 0, "yawns": 0, "start_time": time.time(),
+    "eye_was_closed": False, "yawn_active": False,
+    "last_ear": 0.30, "last_jaw": 0.0, "last_alert": "",
+    "last_face": False, "frame_count": 0, "running": False
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 # ── SIDEBAR ───────────────────────────────────────────────
 with st.sidebar:
     st.title("⚙️ Settings")
-    ear_thr    = st.slider("EAR Threshold",      0.10, 0.35, 0.20, 0.01,
-                           help="Eyes CLOSED if EAR drops below this")
-    jaw_thr    = st.slider("JAW Threshold",      0.10, 0.70, 0.35, 0.01,
-                           help="Yawn if jawOpen rises above this")
+    ear_thr = st.slider("EAR Threshold", 0.10, 0.35, 0.20, 0.01,
+                        help="Eyes closed if EAR below this")
+    jaw_thr = st.slider("JAW Threshold", 0.10, 0.70, 0.35, 0.01,
+                        help="Yawn detected if JAW above this")
     st.markdown("---")
-    st.markdown("""
-**How to use:**
-1. Allow camera access
-2. Click **📸 Capture & Analyze**
-3. Results appear instantly
-
-**Alert Guide:**
-- 😴 Drowsy = EAR below threshold
-- 🥱 Yawn = JAW above threshold  
-- 👀 Distracted = head turned
-    """)
+    col_a, col_b = st.columns(2)
+    if col_a.button("▶️ Start"):
+        st.session_state.running = True
+    if col_b.button("⏹ Stop"):
+        st.session_state.running = False
     if st.button("🔄 Reset Counters"):
-        st.session_state.blinks     = 0
-        st.session_state.yawns      = 0
+        st.session_state.blinks = 0
+        st.session_state.yawns  = 0
         st.session_state.start_time = time.time()
         st.rerun()
+    st.markdown("""
+**Alert Guide:**
+- 😴 Drowsy = EAR low
+- 🥱 Yawn = JAW high
+- 👀 Distracted = head turned
+    """)
 
 # ── MAIN UI ───────────────────────────────────────────────
 st.title("🚗 Driver Drowsiness Monitor")
 st.markdown("---")
 
-mins = int((time.time() - st.session_state.start_time) / 60)
+mins  = int((time.time() - st.session_state.start_time) / 60)
+alert = st.session_state.last_alert
 
-# Metrics row
+if alert == "DROWSY":       st.error("😴 DROWSY! Eyes closed — Wake Up!")
+elif alert == "YAWN":       st.warning("🥱 YAWN detected — Consider a break.")
+elif alert == "DISTRACTED": st.info("👀 DISTRACTED! Focus on the road!")
+elif st.session_state.last_face: st.success("✅ Driver is Alert and Focused")
+else:                       st.info("📷 Click ▶️ Start in sidebar to begin")
+
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("EAR",     f"{st.session_state.get('last_ear', 0.30):.3f}")
-c2.metric("JAW",     f"{st.session_state.get('last_jaw', 0.00):.3f}")
+c1.metric("EAR",     f"{st.session_state.last_ear:.3f}")
+c2.metric("JAW",     f"{st.session_state.last_jaw:.3f}")
 c3.metric("Blinks",  st.session_state.blinks)
 c4.metric("Yawns",   st.session_state.yawns)
 c5.metric("Session", f"{mins}m")
 
 if st.session_state.yawns >= 3:
-    st.warning("⚠️ HIGH FATIGUE — 3+ yawns detected! Please take a break.")
+    st.warning("⚠️ HIGH FATIGUE — 3+ yawns! Please take a break.")
 
 st.markdown("---")
-
 col_cam, col_info = st.columns([2, 1])
 
 with col_cam:
-    st.markdown("### 📷 Camera Feed")
-    
-    # Camera input — works natively on Streamlit Cloud
-    camera_image = st.camera_input("", key="camera", label_visibility="collapsed")
+    st.markdown("### 📷 Live Camera")
+    img_placeholder   = st.empty()
+    status_placeholder = st.empty()
 
-    if camera_image is not None:
-        # Convert to OpenCV format
+    # Camera input — key changes each frame to force a new capture
+    cam_key = f"cam_{st.session_state.frame_count}"
+    camera_image = st.camera_input("", key=cam_key, label_visibility="collapsed")
+
+    if camera_image is not None and st.session_state.running:
         pil_img = Image.open(camera_image)
-        img_rgb = np.array(pil_img)
-        img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+        img_bgr = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
-        # Analyze
         annotated, ear, jaw, face_found, alert, distraction = analyze_frame(img_bgr, ear_thr, jaw_thr)
 
-        # Save metrics
-        st.session_state.last_ear = ear
-        st.session_state.last_jaw = jaw
+        # Update counters
+        st.session_state.last_ear   = ear
+        st.session_state.last_jaw   = jaw
+        st.session_state.last_alert = alert
+        st.session_state.last_face  = face_found
 
-        # Blink detection (eye was open, now closed)
         if ear < ear_thr and not st.session_state.eye_was_closed:
             st.session_state.blinks += 1
             st.session_state.eye_was_closed = True
         elif ear >= ear_thr:
             st.session_state.eye_was_closed = False
 
-        # Yawn detection
         if jaw > jaw_thr and not st.session_state.yawn_active:
             st.session_state.yawns += 1
             st.session_state.yawn_active = True
         elif jaw <= jaw_thr:
             st.session_state.yawn_active = False
 
-        # Show annotated image
-        annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-        st.image(annotated_rgb, use_container_width=True)
+        # Show annotated frame
+        img_placeholder.image(cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB), use_container_width=True)
 
-        # Alert banner
-        if alert == "DROWSY":
-            st.error("😴 DROWSY! Eyes closed — Wake Up!")
-        elif alert == "YAWN":
-            st.warning("🥱 YAWN detected — Consider taking a break.")
-        elif alert == "DISTRACTED":
-            st.info(f"👀 DISTRACTED! {distraction} — Focus on the road!")
-        elif face_found:
-            st.success("✅ Driver is Alert and Focused")
-        else:
-            st.warning("🔍 No face detected — Position your face in frame")
+        # Auto-advance
+        st.session_state.frame_count += 1
+        time.sleep(0.15)
+        st.rerun()
+
+    elif not st.session_state.running:
+        status_placeholder.info("⏸ Paused — Click ▶️ Start in sidebar")
 
 with col_info:
     st.markdown("### 📊 Status")
-    last_alert = st.session_state.get("last_alert", "")
-    face_found = st.session_state.get("last_face", False)
-
-    if camera_image:
-        st.markdown(f"""
-| Metric | Value |
-|--------|-------|
-| **Face** | {"✅ Detected" if face_found else "❌ Not found"} |
-| **EAR** | {st.session_state.get('last_ear', 0.30):.3f} |
-| **JAW** | {st.session_state.get('last_jaw', 0.00):.3f} |
+    st.markdown(f"""
+| | |
+|---|---|
+| **Face** | {"✅ Yes" if st.session_state.last_face else "❌ No"} |
+| **EAR** | {st.session_state.last_ear:.3f} |
+| **JAW** | {st.session_state.last_jaw:.3f} |
 | **Blinks** | {st.session_state.blinks} |
 | **Yawns** | {st.session_state.yawns} |
 | **Session** | {mins} min |
-        """)
-    else:
-        st.info("👆 Take a photo to start analysis")
-
+| **Alert** | {st.session_state.last_alert or "✅ None"} |
+    """)
     st.markdown("---")
     st.markdown("""
 **Thresholds:**
-- EAR < threshold → Eyes closed
-- JAW > threshold → Mouth open (yawn)
 - Normal EAR: 0.28–0.35
 - Normal JAW: 0.00–0.15
+- Yawn JAW: 0.40–0.70
     """)
 
 # Alert beep
-alert_val = st.session_state.get("last_alert_val", "")
-freq, rpt = 0, 0
-if alert_val == "DROWSY":       freq, rpt = 1200, 1500
-elif alert_val == "YAWN":       freq, rpt = 850,  2500
-elif alert_val == "DISTRACTED": freq, rpt = 1000, 2000
+freq = 0
+if alert == "DROWSY":       freq = 1200
+elif alert == "YAWN":       freq = 850
+elif alert == "DISTRACTED": freq = 1000
 
-if camera_image and 'alert' in dir():
-    st.session_state.last_alert_val = alert
-    st.session_state.last_face = face_found if 'face_found' in dir() else False
-
-components.html(f"""<!DOCTYPE html><html><body style="margin:0">
-<script>
-const F = {freq}, R = {rpt};
-function beep() {{
-    if (!F) return;
-    try {{
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        [0, 0.55].forEach(t => {{
-            const o = ctx.createOscillator(), g = ctx.createGain();
-            o.connect(g); g.connect(ctx.destination);
-            o.type = 'sine'; o.frequency.value = F;
-            g.gain.setValueAtTime(0.8, ctx.currentTime + t);
-            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.5);
-            o.start(ctx.currentTime + t);
-            o.stop(ctx.currentTime + t + 0.55);
-        }});
-    }} catch(e) {{}}
-}}
-if (F) {{ beep(); }}
-</script></body></html>""", height=0)
+components.html(f"""<script>
+const F={freq};
+if(F){{try{{
+  const ctx=new(window.AudioContext||window.webkitAudioContext)();
+  [0,0.55].forEach(t=>{{
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);
+    o.type='sine';o.frequency.value=F;
+    g.gain.setValueAtTime(0.8,ctx.currentTime+t);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+0.5);
+    o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+0.55);
+  }});
+}}catch(e){{}}}}
+</script>""", height=0)
