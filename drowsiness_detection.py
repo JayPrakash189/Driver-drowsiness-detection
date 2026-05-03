@@ -3,10 +3,8 @@
 =====================================
 Works with MediaPipe 0.10+ (Tasks API)
 Auto-downloads the required model file on first run.
-
 INSTALL:
     pip install opencv-python mediapipe numpy scipy sounddevice
-
 RUN:
     python drowsiness_detection.py
 """
@@ -17,6 +15,8 @@ import sys
 import os
 import time
 import threading
+import urllib.request
+import mediapipe as mp
 from collections import deque
 from scipy.spatial import distance as dist
 
@@ -131,7 +131,7 @@ def beep(freq=1100, dur=0.6):
 # ══════════════════════════════════════════════════════════
 LEFT_EYE  = [33,  160, 158, 133, 153, 144]
 RIGHT_EYE = [362, 385, 387, 263, 373, 380]
-MOUTH_8   = [61,  40,  37,   0, 267, 270, 291, 321]
+MOUTH_8   = [61, 37, 0, 267, 291, 314, 17, 84]
 
 # Blendshape indices for eye openness and jaw open
 # (more reliable than geometric EAR for blink detection)
@@ -229,6 +229,11 @@ class BlinkDetector:
         self.close_time = 0.0
         self.count      = 0
 
+    def reset(self):
+        """Safely reset state — call this when face is lost."""
+        self.state      = "OPEN"
+        self.close_time = 0.0
+
     def update(self, ear, now):
         """Returns (just_blinked, state, secs_closed)"""
         just_blinked = False
@@ -299,7 +304,7 @@ def draw_hud(frame, ear, jaw, ear_thr, jaw_thr,
 # ══════════════════════════════════════════════════════════
 #  STEP 8 — MAIN
 # ══════════════════════════════════════════════════════════
-import mediapipe as mp   # needed for mp.Image
+import mediapipe as mp   # already imported at top — keeping for clarity
 
 def main():
     _init_sound()
@@ -332,7 +337,7 @@ def main():
         if not ret: break
 
         frame = cv2.flip(frame, 1)
-        H, W  = frame.shape[:3]
+        H, W  = frame.shape[:2]   # BUG FIX: was [:3] which crashes
         now   = time.time()
 
         ear_raw = 0.30
@@ -379,14 +384,16 @@ def main():
 
         # ── Alerts ────────────────────────────────────────
         if face_ok and eye_state == "CLOSED" and secs_closed >= DROWSY_SEC:
-            alert     = "  DROWSY!  Wake Up!"
-            alert_end = now + 2.0
+            if not alert:   # BUG FIX: only set once, don't reassign every frame
+                alert     = "  DROWSY!  Wake Up!"
+                alert_end = now + 2.0
             if now - last_beep > 1.2:
                 beep(1200, 0.8); last_beep = now
 
         elif face_ok and yawn_f >= 15:
-            alert     = "  YAWN!  Stay Alert!"
-            alert_end = now + 2.0
+            if not alert:   # BUG FIX: same here
+                alert     = "  YAWN!  Stay Alert!"
+                alert_end = now + 2.0
             if now - last_beep > 3.0:
                 beep(800, 0.5); last_beep = now
 
@@ -394,7 +401,7 @@ def main():
             alert = ""
 
         if not face_ok:
-            blink_det.state = "OPEN"
+            blink_det.reset()   # BUG FIX: use method not direct attribute access
             cv2.putText(frame, "No face — look at camera",
                         (W//2-165, H//2), cv2.FONT_HERSHEY_SIMPLEX,
                         0.8, (0,40,255), 2)
